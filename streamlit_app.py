@@ -152,7 +152,7 @@ if "img_key" not in st.session_state:
     st.session_state.img_key = 0
 _speech_component = components.declare_component(
     "speech_input",
-    path=os.path.join(os.path.dirname(__file__), "speech_component"),
+    path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "speech_component"),
 )
 
 for message in st.session_state.messages:
@@ -184,10 +184,13 @@ uploaded_file = st.file_uploader(
     label_visibility="collapsed",
 )
 if uploaded_file:
+    uploaded_bytes = uploaded_file.read()  # 한 번만 읽어 재사용
     if model not in VISION_MODELS:
         st.warning(f"이미지 인식은 gpt-4o / gpt-4o-mini 모델에서만 작동합니다. (현재: {model})", icon="⚠️")
     else:
-        st.image(uploaded_file, width=220)
+        st.image(uploaded_bytes, width=220)
+else:
+    uploaded_bytes = None
 
 # 빠른 질문 버튼 또는 직접 입력 처리
 user_input = st.chat_input("대전 맛집을 물어보세요! (예: 유성구 삼겹살 추천해줘)")
@@ -197,16 +200,16 @@ if st.session_state.pending_prompt:
     st.session_state.pending_prompt = None
 
 if prompt:
-    has_image = uploaded_file is not None and model in VISION_MODELS
+    has_image = uploaded_bytes is not None and model in VISION_MODELS
     if has_image:
-        img_bytes = uploaded_file.read()
+        img_bytes = uploaded_bytes
         b64 = base64.b64encode(img_bytes).decode()
         mime = uploaded_file.type
         user_content = [
             {"type": "text", "text": prompt},
             {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
         ]
-        st.session_state.img_key += 1  # 업로더 초기화
+        st.session_state.img_key += 1
     else:
         user_content = prompt
 
