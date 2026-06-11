@@ -31,16 +31,16 @@ body { font-family: sans-serif; background: transparent; padding: 4px; }
 <button id="btn" onclick="toggle()">🎤 말하기</button>
 <div id="status"></div>
 <script>
-// Streamlit 컴포넌트 통신 (CDN 없이 인라인 구현)
+// Streamlit 컴포넌트 통신 (isStreamlitMessage 필수)
 const Streamlit = {
   setComponentValue(value) {
-    window.parent.postMessage({ type: "streamlit:setComponentValue", value, dataType: "json" }, "*");
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setComponentValue", value, dataType: "json" }, "*");
   },
   setComponentReady() {
-    window.parent.postMessage({ type: "streamlit:componentReady", apiVersion: 1 }, "*");
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 }, "*");
   },
   setFrameHeight(h) {
-    window.parent.postMessage({ type: "streamlit:setFrameHeight", height: h }, "*");
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: h }, "*");
   }
 };
 
