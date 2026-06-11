@@ -50,11 +50,11 @@ const status = document.getElementById('status');
 let rec = null, listening = false;
 
 function init() {
+    Streamlit.setComponentReady();
     Streamlit.setFrameHeight(60);
     if (!SR) {
         status.textContent = '❌ Chrome 또는 Edge 브라우저에서 사용 가능합니다';
         btn.disabled = true;
-        Streamlit.setComponentReady();
         return;
     }
     rec = new SR();
@@ -78,7 +78,6 @@ function init() {
         reset();
     };
     rec.onend = () => reset();
-    Streamlit.setComponentReady();
 }
 
 function reset() {
