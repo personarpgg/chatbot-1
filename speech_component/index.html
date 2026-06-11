@@ -2,7 +2,6 @@
 <html>
 <head>
 <meta charset="utf-8">
-<script src="https://unpkg.com/streamlit-component-lib/dist/streamlit-component-lib.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: sans-serif; background: transparent; padding: 4px; }
@@ -32,12 +31,26 @@ body { font-family: sans-serif; background: transparent; padding: 4px; }
 <button id="btn" onclick="toggle()">🎤 말하기</button>
 <div id="status"></div>
 <script>
+// Streamlit 컴포넌트 통신 (CDN 없이 인라인 구현)
+const Streamlit = {
+  setComponentValue(value) {
+    window.parent.postMessage({ type: "streamlit:setComponentValue", value, dataType: "json" }, "*");
+  },
+  setComponentReady() {
+    window.parent.postMessage({ type: "streamlit:componentReady", apiVersion: 1 }, "*");
+  },
+  setFrameHeight(h) {
+    window.parent.postMessage({ type: "streamlit:setFrameHeight", height: h }, "*");
+  }
+};
+
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const btn = document.getElementById('btn');
 const status = document.getElementById('status');
 let rec = null, listening = false;
 
 function init() {
+    Streamlit.setFrameHeight(60);
     if (!SR) {
         status.textContent = '❌ Chrome 또는 Edge 브라우저에서 사용 가능합니다';
         btn.disabled = true;
