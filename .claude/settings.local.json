@@ -9,7 +9,10 @@
       "Bash(git remote *)",
       "Bash(netstat -ano)",
       "Bash(git checkout *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(git -C /mnt/c/Users/SDH/Documents/GitHub/chatbot-1 status)",
+      "Bash(git -C /mnt/c/Users/SDH/Documents/GitHub/chatbot-1 diff)",
+      "Bash(git *)"
     ]
   }
 }
