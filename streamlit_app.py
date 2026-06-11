@@ -163,12 +163,17 @@ for message in st.session_state.messages:
                 if part["type"] == "text":
                     st.markdown(part["text"])
                 elif part["type"] == "image_url":
-                    st.image(part["image_url"]["url"], width=300)
+                    url = part["image_url"]["url"]
+                    if url.startswith("data:"):
+                        _, b64data = url.split(",", 1)
+                        st.image(base64.b64decode(b64data), width=300)
+                    else:
+                        st.image(url, width=300)
         else:
             st.markdown(content)
 
 # ── 음성 입력 ──────────────────────────────────────────────────
-with st.expander("🎤 음성으로 질문하기 (Chrome/Edge)", expanded=False):
+with st.expander("🎤 음성으로 질문하기 — 말하고 정지하면 자동 전송 (Chrome/Edge)", expanded=False):
     voice_text = _speech_component(key="voice_input", default=None)
     if voice_text and voice_text != st.session_state.get("_last_voice"):
         st.session_state["_last_voice"] = voice_text
