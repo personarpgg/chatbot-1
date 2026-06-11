@@ -188,11 +188,13 @@ if prompt:
             response = st.write_stream(stream)
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-    except AuthenticationError:
-        st.error("API Key가 올바르지 않습니다. 사이드바에서 키를 확인해 주세요.", icon="🔑")
+    except AuthenticationError as e:
+        st.error(f"API Key 오류: {e.message}", icon="🔑")
     except RateLimitError:
         st.error("요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.", icon="⏱️")
-    except APIConnectionError:
-        st.error("OpenAI 서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.", icon="🌐")
+    except APIConnectionError as e:
+        st.error(f"연결 오류: {e}", icon="🌐")
     except APIStatusError as e:
-        st.error(f"API 오류가 발생했습니다. (상태 코드: {e.status_code})", icon="⚠️")
+        st.error(f"API 오류 ({e.status_code}): {e.message}", icon="⚠️")
+    except Exception as e:
+        st.error(f"오류 ({type(e).__name__}): {e}", icon="⚠️")
