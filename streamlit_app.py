@@ -159,7 +159,7 @@ with st.expander("🎤 음성으로 질문하기", expanded=False):
     if voice_text and voice_text != st.session_state._last_voice:
         st.session_state._last_voice = voice_text
         st.session_state.pending_prompt = voice_text
-        st.rerun()
+        # st.rerun() 없이 같은 렌더 사이클에서 바로 처리
 
 # 빠른 질문 버튼 또는 직접 입력 처리
 user_input = st.chat_input("대전 맛집을 물어보세요! (예: 유성구 삼겹살 추천해줘)")
