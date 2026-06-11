@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, sans-serif; background: transparent; padding: 6px 8px; }
+
+.row { display: flex; align-items: center; gap: 10px; }
+
+#btn {
+    background: rgba(249,115,22,0.12);
+    border: 1px solid rgba(249,115,22,0.4);
+    color: #FB923C;
+    padding: 7px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+}
+#btn:hover:not(:disabled) { background: rgba(249,115,22,0.28); }
+#btn:disabled { opacity: 0.4; cursor: not-allowed; }
+#btn.rec { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); color: #F87171; }
+
+#status { font-size: 12px; color: #9CA3AF; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 이퀄라이저 바 */
+.viz { display: none; align-items: flex-end; gap: 3px; height: 38px; margin-top: 7px; padding: 0 2px; }
+.viz.on { display: flex; }
+.bar { flex: 1; border-radius: 3px 3px 0 0; background: #F97316; min-height: 4px; }
+.viz.on .bar { animation: eq 0.8s ease-in-out infinite alternate; }
+
+/* 바마다 딜레이 다르게 → 자연스러운 물결 효과 */
+.bar:nth-child(1)  { animation-delay:0.00s }
+.bar:nth-child(2)  { animation-delay:0.06s }
+.bar:nth-child(3)  { animation-delay:0.12s }
+.bar:nth-child(4)  { animation-delay:0.18s }
+.bar:nth-child(5)  { animation-delay:0.24s }
+.bar:nth-child(6)  { animation-delay:0.30s }
+.bar:nth-child(7)  { animation-delay:0.36s }
+.bar:nth-child(8)  { animation-delay:0.30s }
+.bar:nth-child(9)  { animation-delay:0.24s }
+.bar:nth-child(10) { animation-delay:0.18s }
+.bar:nth-child(11) { animation-delay:0.12s }
+.bar:nth-child(12) { animation-delay:0.06s }
+.bar:nth-child(13) { animation-delay:0.00s }
+.bar:nth-child(14) { animation-delay:0.06s }
+.bar:nth-child(15) { animation-delay:0.12s }
+.bar:nth-child(16) { animation-delay:0.18s }
+.bar:nth-child(17) { animation-delay:0.24s }
+.bar:nth-child(18) { animation-delay:0.18s }
+.bar:nth-child(19) { animation-delay:0.12s }
+.bar:nth-child(20) { animation-delay:0.06s }
+
+@keyframes eq { from { height: 4px; opacity: 0.45; } to { height: 34px; opacity: 1.0; } }
+</style>
+</head>
+<body>
+<div class="row">
+    <button id="btn" onclick="toggle()">🎤 말하기</button>
+    <span id="status"></span>
+</div>
+<div class="viz" id="viz">
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+</div>
+
+<script>
+// Streamlit 컴포넌트 통신 프로토콜 (isStreamlitMessage 필수)
+const Streamlit = {
+    setComponentValue(v) {
+        window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setComponentValue", value: v, dataType: "json" }, "*");
+    },
+    setComponentReady() {
+        window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 }, "*");
+    },
+    setFrameHeight(h) {
+        window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: h }, "*");
+    }
+};
+
+const btn  = document.getElementById('btn');
+const viz  = document.getElementById('viz');
+const stat = document.getElementById('status');
+const SR   = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false;
+
+// setComponentReady는 항상 setFrameHeight보다 먼저
+Streamlit.setComponentReady();
+Streamlit.setFrameHeight(46);
+
+if (!SR) {
+    stat.textContent = '❌ Chrome · Edge 전용입니다';
+    btn.disabled = true;
+} else {
+    rec = new SR();
+    rec.lang = 'ko-KR';
+    rec.continuous = false;
+    rec.interimResults = false;
+
+    rec.onstart = () => {
+        listening = true;
+        btn.textContent = '⏹ 정지';
+        btn.classList.add('rec');
+        viz.classList.add('on');
+        stat.textContent = '🎙 듣고 있습니다...';
+        Streamlit.setFrameHeight(96);
+    };
+    rec.onresult = (e) => {
+        const text = e.results[0][0].transcript;
+        stat.textContent = '✅ ' + text;
+        Streamlit.setComponentValue(text);
+    };
+    rec.onerror = (e) => {
+        stat.textContent = e.error === 'not-allowed' ? '🚫 마이크 권한을 허용해 주세요' : '오류: ' + e.error;
+        reset();
+    };
+    rec.onend = reset;
+}
+
+function reset() {
+    listening = false;
+    btn.textContent = '🎤 다시 말하기';
+    btn.classList.remove('rec');
+    viz.classList.remove('on');
+    Streamlit.setFrameHeight(46);
+}
+
+function toggle() {
+    if (!rec) return;
+    listening ? rec.stop() : rec.start();
+}
+</script>
+</body>
+</html>

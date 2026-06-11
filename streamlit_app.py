@@ -1,8 +1,14 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from openai import OpenAI
 from openai import AuthenticationError, RateLimitError, APIConnectionError, APIStatusError
 import json
 from datetime import datetime
+import os
+
+# st.stop() 전에 등록해야 Streamlit Cloud에서도 안정적으로 동작
+_SPEECH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "speech_component")
+_speech_input = components.declare_component("speech_input", path=_SPEECH_DIR)
 
 st.set_page_config(
     page_title="🍽️ 대전 맛집 챗봇",
@@ -139,10 +145,21 @@ if "pending_prompt" not in st.session_state:
     st.session_state.pending_prompt = None
 if "model" not in st.session_state:
     st.session_state.model = "gpt-4o"
+if "_last_voice" not in st.session_state:
+    st.session_state._last_voice = None
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+
+# ── 음성 입력 ──────────────────────────────────────────────────
+with st.expander("🎤 음성으로 질문하기", expanded=False):
+    st.caption("말하고 정지하면 자동으로 전송됩니다 · Chrome/Edge 전용")
+    voice_text = _speech_input(key="voice", default=None)
+    if voice_text and voice_text != st.session_state._last_voice:
+        st.session_state._last_voice = voice_text
+        st.session_state.pending_prompt = voice_text
+        st.rerun()
 
 # 빠른 질문 버튼 또는 직접 입력 처리
 user_input = st.chat_input("대전 맛집을 물어보세요! (예: 유성구 삼겹살 추천해줘)")
