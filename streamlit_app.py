@@ -5,6 +5,7 @@ from openai import AuthenticationError, RateLimitError, APIConnectionError, APIS
 import json
 from datetime import datetime
 import os
+import base64
 
 st.set_page_config(
     page_title="🍽️ 대전 맛집 챗봇",
@@ -114,8 +115,14 @@ with st.sidebar:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         messages = st.session_state.messages
 
+        def _content_text(c):
+            if isinstance(c, list):
+                parts = [p["text"] for p in c if p.get("type") == "text"]
+                return " ".join(parts) + (" [이미지 첨부]" if any(p.get("type") == "image_url" for p in c) else "")
+            return c
+
         txt_lines = "\n\n".join(
-            f"[{m['role'].upper()}]\n{m['content']}" for m in messages
+            f"[{m['role'].upper()}]\n{_content_text(m['content'])}" for m in messages
         )
         st.download_button("📄 TXT", data=txt_lines,
                            file_name=f"daejeon_chat_{timestamp}.txt",
@@ -141,6 +148,8 @@ if "pending_prompt" not in st.session_state:
     st.session_state.pending_prompt = None
 if "model" not in st.session_state:
     st.session_state.model = "gpt-4o"
+if "img_key" not in st.session_state:
+    st.session_state.img_key = 0
 _speech_component = components.declare_component(
     "speech_input",
     path=os.path.join(os.path.dirname(__file__), "speech_component"),
@@ -148,7 +157,15 @@ _speech_component = components.declare_component(
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        content = message["content"]
+        if isinstance(content, list):
+            for part in content:
+                if part["type"] == "text":
+                    st.markdown(part["text"])
+                elif part["type"] == "image_url":
+                    st.image(part["image_url"]["url"], width=300)
+        else:
+            st.markdown(content)
 
 # ── 음성 입력 ──────────────────────────────────────────────────
 with st.expander("🎤 음성으로 질문하기 (Chrome/Edge)", expanded=False):
@@ -158,6 +175,20 @@ with st.expander("🎤 음성으로 질문하기 (Chrome/Edge)", expanded=False)
         st.session_state.pending_prompt = voice_text
         st.rerun()
 
+# ── 이미지 첨부 ────────────────────────────────────────────────
+VISION_MODELS = {"gpt-4o", "gpt-4o-mini"}
+uploaded_file = st.file_uploader(
+    "📎 이미지 첨부 (JPG·PNG·WEBP)",
+    type=["jpg", "jpeg", "png", "webp"],
+    key=f"img_{st.session_state.img_key}",
+    label_visibility="collapsed",
+)
+if uploaded_file:
+    if model not in VISION_MODELS:
+        st.warning(f"이미지 인식은 gpt-4o / gpt-4o-mini 모델에서만 작동합니다. (현재: {model})", icon="⚠️")
+    else:
+        st.image(uploaded_file, width=220)
+
 # 빠른 질문 버튼 또는 직접 입력 처리
 user_input = st.chat_input("대전 맛집을 물어보세요! (예: 유성구 삼겹살 추천해줘)")
 
@@ -166,9 +197,26 @@ if st.session_state.pending_prompt:
     st.session_state.pending_prompt = None
 
 if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    has_image = uploaded_file is not None and model in VISION_MODELS
+    if has_image:
+        img_bytes = uploaded_file.read()
+        b64 = base64.b64encode(img_bytes).decode()
+        mime = uploaded_file.type
+        user_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+        ]
+        st.session_state.img_key += 1  # 업로더 초기화
+    else:
+        user_content = prompt
+
+    st.session_state.messages.append({"role": "user", "content": user_content})
     with st.chat_message("user"):
-        st.markdown(prompt)
+        if has_image:
+            st.markdown(prompt)
+            st.image(img_bytes, width=300)
+        else:
+            st.markdown(prompt)
 
     trimmed = st.session_state.messages[-max_history:]
     api_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + [
