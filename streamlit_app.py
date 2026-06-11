@@ -1,16 +1,23 @@
 import streamlit as st
 from openai import OpenAI
+from openai import AuthenticationError, RateLimitError, APIConnectionError, APIStatusError
 import json
 from datetime import datetime
 
-st.set_page_config(page_title="💬 Chatbot", page_icon="💬")
-st.title("💬 Chatbot")
+st.set_page_config(page_title="💬 챗봇", page_icon="💬")
+st.title("💬 챗봇")
 
 # ── 사이드바 설정 ─────────────────────────────────────────────
 with st.sidebar:
     st.header("설정")
 
-    openai_api_key = st.text_input("OpenAI API Key", type="password")
+    # secrets.toml에 키가 있으면 자동 사용, 없으면 입력창 표시
+    default_key = st.secrets.get("OPENAI_API_KEY", "") if hasattr(st, "secrets") else ""
+    if default_key:
+        openai_api_key = default_key
+        st.success("API Key가 secrets에서 로드됐습니다.", icon="✅")
+    else:
+        openai_api_key = st.text_input("OpenAI API Key", type="password")
 
     model = st.selectbox(
         "모델 선택",
@@ -91,18 +98,26 @@ else:
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # 토큰 초과 방지: 최근 max_history 개 메시지만 API에 전송
         trimmed = st.session_state.messages[-max_history:]
         api_messages = [{"role": "system", "content": system_prompt}] + [
             {"role": m["role"], "content": m["content"]} for m in trimmed
         ]
 
-        stream = client.chat.completions.create(
-            model=model,
-            messages=api_messages,
-            stream=True,
-        )
+        try:
+            stream = client.chat.completions.create(
+                model=model,
+                messages=api_messages,
+                stream=True,
+            )
+            with st.chat_message("assistant"):
+                response = st.write_stream(stream)
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        except AuthenticationError:
+            st.error("API Key가 올바르지 않습니다. 사이드바에서 키를 확인해 주세요.", icon="🔑")
+        except RateLimitError:
+            st.error("요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.", icon="⏱️")
+        except APIConnectionError:
+            st.error("OpenAI 서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.", icon="🌐")
+        except APIStatusError as e:
+            st.error(f"API 오류가 발생했습니다. (상태 코드: {e.status_code})", icon="⚠️")
