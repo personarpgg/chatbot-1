@@ -5,6 +5,7 @@ from openai import AuthenticationError, RateLimitError, APIConnectionError, APIS
 import json
 from datetime import datetime
 import os
+import base64
 
 # st.stop() 전에 등록해야 Streamlit Cloud에서도 안정적으로 동작
 _SPEECH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "speech_component")
@@ -57,6 +58,8 @@ div[data-testid="stChatInput"] textarea {
 SYSTEM_PROMPT = """당신은 대전 맛집 전문 AI 어시스턴트입니다.
 대전 전 지역(유성구·서구·동구·중구·대덕구)의 식당을 잘 알고 있으며,
 음식 종류·분위기·가격대·위치를 고려해 최적의 맛집을 추천해줍니다.
+
+사진이 첨부된 경우, 사진 속 음식이나 장소를 분석해 대전에서 비슷한 음식을 맛볼 수 있는 식당을 추천해주세요.
 
 추천할 때는 아래 형식을 따르세요:
 - 식당 이름과 위치(동·구 기준)
@@ -118,9 +121,12 @@ with st.sidebar:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         messages = st.session_state.messages
 
-        txt_lines = "\n\n".join(
-            f"[{m['role'].upper()}]\n{m['content']}" for m in messages
-        )
+        def _text(c):
+            if isinstance(c, list):
+                t = " ".join(p["text"] for p in c if p.get("type") == "text")
+                return t + (" [이미지 첨부]" if any(p.get("type") == "image_url" for p in c) else "")
+            return c
+        txt_lines = "\n\n".join(f"[{m['role'].upper()}]\n{_text(m['content'])}" for m in messages)
         st.download_button("📄 TXT", data=txt_lines,
                            file_name=f"daejeon_chat_{timestamp}.txt",
                            mime="text/plain", use_container_width=True)
@@ -147,10 +153,25 @@ if "model" not in st.session_state:
     st.session_state.model = "gpt-4o"
 if "_last_voice" not in st.session_state:
     st.session_state._last_voice = None
+if "_img_bytes" not in st.session_state:
+    st.session_state._img_bytes = None
+if "_img_mime" not in st.session_state:
+    st.session_state._img_mime = None
+if "_img_key" not in st.session_state:
+    st.session_state._img_key = 0
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        content = message["content"]
+        if isinstance(content, list):
+            for part in content:
+                if part["type"] == "text":
+                    st.markdown(part["text"])
+                elif part["type"] == "image_url":
+                    _, b64 = part["image_url"]["url"].split(",", 1)
+                    st.image(base64.b64decode(b64), width=280)
+        else:
+            st.markdown(content)
 
 # ── 음성 입력 ──────────────────────────────────────────────────
 with st.expander("🎤 음성으로 질문하기", expanded=False):
@@ -161,17 +182,61 @@ with st.expander("🎤 음성으로 질문하기", expanded=False):
         st.session_state.pending_prompt = voice_text
         # st.rerun() 없이 같은 렌더 사이클에서 바로 처리
 
+# ── 이미지 업로드 ───────────────────────────────────────────────
+VISION_MODELS = {"gpt-4o", "gpt-4o-mini"}
+uploaded = st.file_uploader(
+    "📷 음식 사진 첨부",
+    type=["jpg", "jpeg", "png", "webp"],
+    key=f"img_{st.session_state._img_key}",
+    label_visibility="collapsed",
+)
+if uploaded:
+    raw = uploaded.read()
+    if raw:  # 새 업로드 → bytes 저장
+        st.session_state._img_bytes = raw
+        st.session_state._img_mime = uploaded.type or "image/jpeg"
+    if st.session_state._img_bytes:
+        if model not in VISION_MODELS:
+            st.warning("이미지 인식은 gpt-4o / gpt-4o-mini 모델만 지원합니다.", icon="⚠️")
+        else:
+            st.image(st.session_state._img_bytes, width=220)
+            st.caption("💬 아래 채팅창에 질문을 입력하고 전송하세요")
+else:
+    st.session_state._img_bytes = None
+    st.session_state._img_mime = None
+
 # 빠른 질문 버튼 또는 직접 입력 처리
-user_input = st.chat_input("대전 맛집을 물어보세요! (예: 유성구 삼겹살 추천해줘)")
+user_input = st.chat_input("대전 맛집을 물어보세요! 사진과 함께 질문해도 됩니다 🍽️")
 
 prompt = st.session_state.pending_prompt or user_input
 if st.session_state.pending_prompt:
     st.session_state.pending_prompt = None
 
 if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    img_bytes = st.session_state._img_bytes
+    img_mime  = st.session_state._img_mime or "image/jpeg"
+    has_image = bool(img_bytes) and model in VISION_MODELS
+
+    if has_image:
+        b64 = base64.b64encode(img_bytes).decode()
+        user_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": f"data:{img_mime};base64,{b64}"}},
+        ]
+        # 전송 후 업로더 초기화
+        st.session_state._img_bytes = None
+        st.session_state._img_mime  = None
+        st.session_state._img_key  += 1
+    else:
+        user_content = prompt
+
+    st.session_state.messages.append({"role": "user", "content": user_content})
     with st.chat_message("user"):
-        st.markdown(prompt)
+        if has_image:
+            st.markdown(prompt)
+            st.image(img_bytes, width=280)
+        else:
+            st.markdown(prompt)
 
     trimmed = st.session_state.messages[-max_history:]
     api_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + [
