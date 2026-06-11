@@ -32,6 +32,6 @@ echo [3/3] Chatbot 실행 중...
 echo  브라우저가 자동으로 열립니다. (http://localhost:8501)
 echo  종료하려면 이 창을 닫거나 Ctrl+C 를 누르세요.
 echo.
-python -m streamlit run streamlit_app.py
+python -m streamlit run streamlit_app.py --server.port 8501 --server.address localhost --browser.serverAddress localhost --browser.serverPort 8501
 
 pause
