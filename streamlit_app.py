@@ -1,9 +1,10 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from openai import OpenAI
 from openai import AuthenticationError, RateLimitError, APIConnectionError, APIStatusError
 import json
 from datetime import datetime
-import io
+import os
 
 st.set_page_config(
     page_title="🍽️ 대전 맛집 챗봇",
@@ -140,35 +141,22 @@ if "pending_prompt" not in st.session_state:
     st.session_state.pending_prompt = None
 if "model" not in st.session_state:
     st.session_state.model = "gpt-4o"
-if "last_audio_id" not in st.session_state:
-    st.session_state.last_audio_id = None
+_speech_component = components.declare_component(
+    "speech_input",
+    path=os.path.join(os.path.dirname(__file__), "speech_component"),
+)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 # ── 음성 입력 ──────────────────────────────────────────────────
-with st.expander("🎤 음성으로 질문하기", expanded=False):
-    audio_value = st.audio_input("마이크 버튼을 눌러 말씀해 주세요")
-    if audio_value is not None:
-        audio_id = id(audio_value)
-        if audio_id != st.session_state.last_audio_id:
-            st.session_state.last_audio_id = audio_id
-            with st.spinner("음성을 텍스트로 변환 중..."):
-                audio_bytes = audio_value.read()
-                audio_file = io.BytesIO(audio_bytes)
-                audio_file.name = "voice.wav"
-                try:
-                    transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        language="ko",
-                    )
-                    st.session_state.pending_prompt = transcription.text
-                    st.success(f"인식된 텍스트: {transcription.text}")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"음성 인식 오류: {e}")
+with st.expander("🎤 음성으로 질문하기 (Chrome/Edge)", expanded=False):
+    voice_text = _speech_component(key="voice_input", default=None)
+    if voice_text and voice_text != st.session_state.get("_last_voice"):
+        st.session_state["_last_voice"] = voice_text
+        st.session_state.pending_prompt = voice_text
+        st.rerun()
 
 # 빠른 질문 버튼 또는 직접 입력 처리
 user_input = st.chat_input("대전 맛집을 물어보세요! (예: 유성구 삼겹살 추천해줘)")
